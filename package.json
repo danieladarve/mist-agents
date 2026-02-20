@@ -1,0 +1,46 @@
+{
+  "name": "mist-agents",
+  "version": "1.0.0",
+  "description": "CLI tool that chains AI agents to process documents end-to-end",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "mist": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsup src/cli.ts --format esm --dts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "pdf",
+    "langchain",
+    "claude"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.5.0",
+    "@types/pdf-parse": "^1.1.5",
+    "@vitest/coverage-v8": "^4.1.2",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  },
+  "dependencies": {
+    "@langchain/anthropic": "^1.3.25",
+    "@langchain/community": "^1.1.25",
+    "@langchain/core": "^1.1.36",
+    "commander": "^14.0.3",
+    "js-yaml": "^4.1.1",
+    "langchain": "^1.2.37",
+    "pdf-parse": "^2.4.5",
+    "zod": "^4.3.6"
+  }
+}
