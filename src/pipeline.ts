@@ -15,6 +15,7 @@ import { logger } from "./utils/logger.js";
 
 export interface PipelineOptions {
   readonly configPath?: string;
+  readonly config?: PipelineConfig;
   readonly outputPath?: string;
   readonly verbose?: boolean;
 }
@@ -41,7 +42,7 @@ export function loadConfig(configPath?: string): PipelineConfig {
   const targetPath = configPath ?? defaultConfigPath;
 
   const raw = readFileSync(targetPath, "utf-8");
-  const parsed = yaml.load(raw) as unknown;
+  const parsed = yaml.load(raw, { schema: yaml.CORE_SCHEMA }) as unknown;
 
   const config = PipelineConfigSchema.parse(parsed);
   return applyModelOverride(config);
@@ -51,7 +52,7 @@ export async function runPipeline(
   filePath: string,
   options: PipelineOptions = {},
 ): Promise<DocumentOutput> {
-  const config = loadConfig(options.configPath);
+  const config = options.config ?? loadConfig(options.configPath);
   const enabledAgents = config.agents.filter((a) => a.enabled);
 
   if (enabledAgents.length === 0) {

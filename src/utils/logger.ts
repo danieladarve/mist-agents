@@ -7,7 +7,11 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   error: 3,
 };
 
-let currentLevel: LogLevel = (process.env["MIST_LOG_LEVEL"] as LogLevel) ?? "info";
+const VALID_LEVELS: readonly LogLevel[] = ["debug", "info", "warn", "error"];
+const envLevel = process.env["MIST_LOG_LEVEL"];
+let currentLevel: LogLevel = VALID_LEVELS.includes(envLevel as LogLevel)
+  ? (envLevel as LogLevel)
+  : "info";
 
 export function setLogLevel(level: LogLevel): void {
   currentLevel = level;

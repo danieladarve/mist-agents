@@ -12,23 +12,9 @@ const pkg = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
 ) as { version: string };
 
-function validateApiKey(configPath?: string): void {
-  const config = loadConfig(configPath);
-  const enabledAgents = config.agents.filter((a) => a.enabled);
-
-  if (requiresApiKey(enabledAgents) && !process.env["ANTHROPIC_API_KEY"]) {
-    process.stderr.write(
-      "Error: ANTHROPIC_API_KEY environment variable is required for Anthropic provider.\n" +
-      "Set it with: export ANTHROPIC_API_KEY=your-key-here\n" +
-      "Or use a local model by setting provider: ollama in your agents.yaml config.\n",
-    );
-    process.exit(1);
-  }
-}
-
 function formatError(error: unknown): string {
   if (error instanceof JsonParseError) {
-    return `LLM returned unparseable output: ${error.message}\nRaw (truncated): ${error.rawContent.slice(0, 200)}`;
+    return "LLM returned unparseable output. Re-run with --verbose for details.";
   }
   if (error instanceof Error) {
     if (error.message.includes("429") || error.message.includes("rate limit")) {
@@ -79,12 +65,22 @@ const program = new Command()
       setLogLevel("debug");
     }
 
-    const configPath = opts.config ? resolve(opts.config) : undefined;
-    validateApiKey(configPath);
-
     try {
+      const configPath = opts.config ? resolve(opts.config) : undefined;
+      const config = loadConfig(configPath);
+      const enabledAgents = config.agents.filter((a) => a.enabled);
+
+      if (requiresApiKey(enabledAgents) && !process.env["ANTHROPIC_API_KEY"]) {
+        process.stderr.write(
+          "Error: ANTHROPIC_API_KEY environment variable is required for Anthropic provider.\n" +
+          "Set it with: export ANTHROPIC_API_KEY=your-key-here\n" +
+          "Or use a local model by setting provider: ollama in your agents.yaml config.\n",
+        );
+        process.exit(1);
+      }
+
       const result = await runPipeline(resolve(file), {
-        configPath,
+        config,
         outputPath: opts.output ? resolve(opts.output) : undefined,
         verbose: opts.verbose,
       });
@@ -97,6 +93,9 @@ const program = new Command()
       process.stderr.write(`Error: ${message}\n`);
       if (opts.verbose && error instanceof Error && error.stack) {
         process.stderr.write(`\nStack trace:\n${error.stack}\n`);
+      }
+      if (opts.verbose && error instanceof JsonParseError) {
+        logger.debug(`Raw LLM output (truncated): ${error.rawContent.slice(0, 300)}`);
       }
       process.exit(1);
     }
