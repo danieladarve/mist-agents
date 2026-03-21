@@ -10,7 +10,8 @@ export const ExtractedEntitySchema = z.object({
 export const SectionSummarySchema = z.object({
   heading: z.string(),
   summary: z.string(),
-  pageRange: z.tuple([z.number(), z.number()]),
+  pageRange: z.tuple([z.number().int().positive(), z.number().int().positive()])
+    .refine(([start, end]) => end >= start, { message: "pageRange end must be >= start" }),
   keyEntities: z.array(ExtractedEntitySchema),
 });
 
