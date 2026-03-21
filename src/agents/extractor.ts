@@ -4,7 +4,7 @@ import type { AgentConfig } from "../schemas/config.js";
 import type { PageChunk } from "../loader.js";
 import { ExtractedEntitySchema } from "../schemas/output.js";
 import type { ExtractedEntity } from "../schemas/output.js";
-import { createChatModel } from "../models.js";
+import { createChatModel, MODEL_TIMEOUT_MS } from "../models.js";
 import { extractJson, extractContentString } from "../utils/json.js";
 import { logger } from "../utils/logger.js";
 
@@ -52,7 +52,7 @@ export function createExtractorChain(config: AgentConfig) {
       const response = await model.invoke([
         { role: "system" as const, content: SYSTEM_PROMPT },
         { role: "human" as const, content: pageTexts },
-      ]);
+      ], { timeout: MODEL_TIMEOUT_MS });
 
       const content = extractContentString(response.content);
       const raw = extractJson(content);

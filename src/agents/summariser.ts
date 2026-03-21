@@ -4,7 +4,7 @@ import type { AgentConfig } from "../schemas/config.js";
 import type { PageChunk } from "../loader.js";
 import { SectionSummarySchema } from "../schemas/output.js";
 import type { ExtractedEntity, SectionSummary } from "../schemas/output.js";
-import { createChatModel } from "../models.js";
+import { createChatModel, MODEL_TIMEOUT_MS } from "../models.js";
 import { extractJson, extractContentString } from "../utils/json.js";
 import { logger } from "../utils/logger.js";
 
@@ -69,7 +69,7 @@ export function createSummariserChain(config: AgentConfig) {
           role: "human" as const,
           content: `Document pages:\n${pageTexts}\n\nExtracted entities:\n${entityList}`,
         },
-      ]);
+      ], { timeout: MODEL_TIMEOUT_MS });
 
       const content = extractContentString(response.content);
       const raw = extractJson(content);

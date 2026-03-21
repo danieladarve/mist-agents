@@ -2,7 +2,7 @@ import { RunnableLambda } from "@langchain/core/runnables";
 import type { AgentConfig } from "../schemas/config.js";
 import type { ExtractedEntity, SectionSummary, DocumentOutput } from "../schemas/output.js";
 import { DocumentOutputSchema } from "../schemas/output.js";
-import { createChatModel } from "../models.js";
+import { createChatModel, MODEL_TIMEOUT_MS } from "../models.js";
 import { extractJson, extractContentString } from "../utils/json.js";
 import { logger } from "../utils/logger.js";
 
@@ -56,7 +56,7 @@ export function createStructurerChain(config: AgentConfig) {
       const response = await model.invoke([
         { role: "system" as const, content: SYSTEM_PROMPT },
         { role: "human" as const, content: `Structure this data into the final document format:\n${payload}` },
-      ]);
+      ], { timeout: MODEL_TIMEOUT_MS });
 
       const content = extractContentString(response.content);
       const raw = extractJson(content);
@@ -75,16 +75,22 @@ export function createStructurerChain(config: AgentConfig) {
         { role: "assistant" as const, content },
         {
           role: "human" as const,
-          content: `The JSON you returned failed validation with these errors:\n${result.error.message}\n\nPlease fix the JSON and return only valid JSON.`,
+          content: "The JSON you returned failed validation. Please fix the JSON and return only valid JSON.",
         },
-      ]);
+      ], { timeout: MODEL_TIMEOUT_MS });
 
       const retryContent = extractContentString(retryResponse.content);
       const retryRaw = extractJson(retryContent);
-      const retryResult = DocumentOutputSchema.parse(retryRaw);
+      const retryResult = DocumentOutputSchema.safeParse(retryRaw);
 
-      logger.info("Structurer: retry output validated successfully");
-      return retryResult;
+      if (retryResult.success) {
+        logger.info("Structurer: retry output validated successfully");
+        return retryResult.data;
+      }
+
+      throw new Error(
+        `Structurer failed validation after retry. Errors: ${retryResult.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+      );
     },
   });
 }

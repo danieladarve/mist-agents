@@ -30,6 +30,8 @@ export function createChatModel(config: AgentConfig): BaseChatModel {
   }
 }
 
+export const MODEL_TIMEOUT_MS = 120_000;
+
 export function requiresApiKey(configs: readonly AgentConfig[]): boolean {
   return configs.some((c) => c.provider === "anthropic" && c.enabled);
 }
