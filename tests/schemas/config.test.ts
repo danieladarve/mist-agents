@@ -43,6 +43,17 @@ describe("AgentConfigSchema", () => {
     expect(result.baseUrl).toBe("http://192.168.1.100:11434");
   });
 
+  it("rejects invalid baseUrl", () => {
+    expect(() =>
+      AgentConfigSchema.parse({
+        name: "extractor",
+        provider: "ollama",
+        model: "qwen3:8b",
+        baseUrl: "not-a-url",
+      }),
+    ).toThrow();
+  });
+
   it("rejects invalid provider", () => {
     expect(() =>
       AgentConfigSchema.parse({ name: "test", provider: "openai" }),
@@ -84,6 +95,16 @@ describe("PipelineConfigSchema", () => {
         version: "1.0",
         agents: [],
         output: { format: "xml" },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects jsonl format (not yet implemented)", () => {
+    expect(() =>
+      PipelineConfigSchema.parse({
+        version: "1.0",
+        agents: [],
+        output: { format: "jsonl" },
       }),
     ).toThrow();
   });

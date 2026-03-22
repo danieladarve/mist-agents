@@ -80,6 +80,28 @@ describe("SectionSummarySchema", () => {
     };
     expect(SectionSummarySchema.parse(section)).toEqual(section);
   });
+
+  it("rejects reversed pageRange", () => {
+    expect(() =>
+      SectionSummarySchema.parse({
+        heading: "Section",
+        summary: "Summary.",
+        pageRange: [5, 1],
+        keyEntities: [],
+      }),
+    ).toThrow("pageRange end must be >= start");
+  });
+
+  it("rejects non-positive page numbers in pageRange", () => {
+    expect(() =>
+      SectionSummarySchema.parse({
+        heading: "Section",
+        summary: "Summary.",
+        pageRange: [0, 3],
+        keyEntities: [],
+      }),
+    ).toThrow();
+  });
 });
 
 describe("DocumentOutputSchema", () => {

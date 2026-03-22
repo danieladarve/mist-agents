@@ -6,6 +6,7 @@ const mockInvoke = vi.fn();
 
 vi.mock("../../src/models.js", () => ({
   createChatModel: () => ({ invoke: mockInvoke }),
+  MODEL_TIMEOUT_MS: 120_000,
 }));
 
 const mockConfig: AgentConfig = {
@@ -86,6 +87,23 @@ describe("createStructurerChain", () => {
 
     expect(mockInvoke).toHaveBeenCalledTimes(2);
     expect(result.metadata.processedAt).toBe("2024-01-01T00:00:00Z");
+  });
+
+  it("throws readable error on double validation failure", async () => {
+    const invalidOutput = {
+      ...validOutput,
+      metadata: { ...validOutput.metadata, processedAt: "not-a-date" },
+    };
+
+    mockInvoke
+      .mockResolvedValueOnce({ content: JSON.stringify(invalidOutput) })
+      .mockResolvedValueOnce({ content: JSON.stringify(invalidOutput) });
+
+    const chain = createStructurerChain(mockConfig);
+
+    await expect(chain.invoke(structurerInput)).rejects.toThrow(
+      "Structurer failed validation after retry",
+    );
   });
 
   it("handles content block array response", async () => {

@@ -6,6 +6,7 @@ const mockInvoke = vi.fn();
 
 vi.mock("../../src/models.js", () => ({
   createChatModel: () => ({ invoke: mockInvoke }),
+  MODEL_TIMEOUT_MS: 120_000,
 }));
 
 const mockConfig: AgentConfig = {
