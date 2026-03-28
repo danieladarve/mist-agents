@@ -1,8 +1,11 @@
-import { ChatAnthropic } from "@langchain/anthropic";
 import { RunnableLambda } from "@langchain/core/runnables";
+import { z } from "zod";
 import type { AgentConfig } from "../schemas/config.js";
 import type { PageChunk } from "../loader.js";
+import { SectionSummarySchema } from "../schemas/output.js";
 import type { ExtractedEntity, SectionSummary } from "../schemas/output.js";
+import { createChatModel } from "../models.js";
+import { extractJson, extractContentString } from "../utils/json.js";
 import { logger } from "../utils/logger.js";
 
 export interface SummariserInput {
@@ -15,6 +18,11 @@ export interface SummariserOutput {
   readonly sections: readonly SectionSummary[];
   readonly fullSummary: string;
 }
+
+const SummariserResponseSchema = z.object({
+  sections: z.array(SectionSummarySchema),
+  fullSummary: z.string(),
+});
 
 const SYSTEM_PROMPT = `You are a document summariser. Given document pages and extracted entities, create section summaries.
 
@@ -43,11 +51,7 @@ Return ONLY valid JSON in this exact format:
 Do not include any text outside the JSON object.`;
 
 export function createSummariserChain(config: AgentConfig) {
-  const model = new ChatAnthropic({
-    model: config.model,
-    maxTokens: config.maxTokens,
-    temperature: config.temperature,
-  });
+  const model = createChatModel(config);
 
   return new RunnableLambda({
     func: async (input: SummariserInput): Promise<SummariserOutput> => {
@@ -67,17 +71,9 @@ export function createSummariserChain(config: AgentConfig) {
         },
       ]);
 
-      const content = typeof response.content === "string"
-        ? response.content
-        : response.content
-            .filter((block): block is { type: "text"; text: string } => block.type === "text")
-            .map((block) => block.text)
-            .join("");
-
-      const parsed = JSON.parse(content) as {
-        sections: SectionSummary[];
-        fullSummary: string;
-      };
+      const content = extractContentString(response.content);
+      const raw = extractJson(content);
+      const parsed = SummariserResponseSchema.parse(raw);
 
       logger.info(`Summariser: created ${parsed.sections.length} section summaries`);
 

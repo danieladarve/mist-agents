@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
 
-vi.mock("node:fs", async () => {
-  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
-  return {
-    ...actual,
-    existsSync: vi.fn(),
-    readFileSync: vi.fn(),
-  };
-});
+const mockAccess = vi.fn();
+const mockReadFile = vi.fn();
+
+vi.mock("node:fs/promises", () => ({
+  access: (...args: unknown[]) => mockAccess(...args),
+  readFile: (...args: unknown[]) => mockReadFile(...args),
+}));
+
+vi.mock("node:fs", () => ({
+  constants: { R_OK: 4 },
+}));
 
 let mockGetText = vi.fn();
 let mockDestroy = vi.fn();
@@ -29,34 +31,33 @@ describe("loadDocument", () => {
   });
 
   it("throws if file does not exist", async () => {
-    vi.mocked(existsSync).mockReturnValue(false);
+    mockAccess.mockRejectedValue(new Error("ENOENT"));
 
     const { loadDocument } = await import("../src/loader.js");
-    await expect(loadDocument("/fake/file.pdf")).rejects.toThrow("File not found");
+    await expect(loadDocument("/fake/file.pdf")).rejects.toThrow("not found or not readable");
   });
 
   it("throws if file is not a valid PDF", async () => {
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFileSync).mockReturnValue(Buffer.from("not a pdf file"));
+    mockAccess.mockResolvedValue(undefined);
+    mockReadFile.mockResolvedValue(Buffer.from("not a pdf file"));
 
     const { loadDocument } = await import("../src/loader.js");
     await expect(loadDocument("/fake/file.pdf")).rejects.toThrow("Invalid PDF file");
   });
 
   it("throws if PDF has no extractable text", async () => {
-    const pdfBuffer = Buffer.from("%PDF-some content");
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFileSync).mockReturnValue(pdfBuffer);
+    mockAccess.mockResolvedValue(undefined);
+    mockReadFile.mockResolvedValue(Buffer.from("%PDF-some content"));
     mockGetText.mockResolvedValue({ text: "", pages: [] });
 
     const { loadDocument } = await import("../src/loader.js");
     await expect(loadDocument("/fake/file.pdf")).rejects.toThrow("no extractable text");
+    expect(mockDestroy).toHaveBeenCalled();
   });
 
   it("returns page chunks from valid PDF", async () => {
-    const pdfBuffer = Buffer.from("%PDF-some content");
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFileSync).mockReturnValue(pdfBuffer);
+    mockAccess.mockResolvedValue(undefined);
+    mockReadFile.mockResolvedValue(Buffer.from("%PDF-some content"));
     mockGetText.mockResolvedValue({
       text: "Page 1 content\nPage 2 content",
       pages: [
@@ -71,12 +72,12 @@ describe("loadDocument", () => {
     expect(pages).toHaveLength(2);
     expect(pages[0]).toEqual({ pageNumber: 1, text: "Page 1 content" });
     expect(pages[1]).toEqual({ pageNumber: 2, text: "Page 2 content" });
+    expect(mockDestroy).toHaveBeenCalled();
   });
 
   it("filters out empty pages", async () => {
-    const pdfBuffer = Buffer.from("%PDF-content");
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFileSync).mockReturnValue(pdfBuffer);
+    mockAccess.mockResolvedValue(undefined);
+    mockReadFile.mockResolvedValue(Buffer.from("%PDF-content"));
     mockGetText.mockResolvedValue({
       text: "Content",
       pages: [
@@ -92,5 +93,29 @@ describe("loadDocument", () => {
     expect(pages).toHaveLength(2);
     expect(pages[0]?.pageNumber).toBe(1);
     expect(pages[1]?.pageNumber).toBe(3);
+  });
+
+  it("throws if PDF exceeds token limit", async () => {
+    mockAccess.mockResolvedValue(undefined);
+    mockReadFile.mockResolvedValue(Buffer.from("%PDF-content"));
+    const hugeText = "x".repeat(700_000); // ~175k tokens
+    mockGetText.mockResolvedValue({
+      text: hugeText,
+      pages: [{ num: 1, text: hugeText }],
+    });
+
+    const { loadDocument } = await import("../src/loader.js");
+    await expect(loadDocument("/fake/file.pdf")).rejects.toThrow("too large");
+    expect(mockDestroy).toHaveBeenCalled();
+  });
+
+  it("calls destroy even when getText throws", async () => {
+    mockAccess.mockResolvedValue(undefined);
+    mockReadFile.mockResolvedValue(Buffer.from("%PDF-content"));
+    mockGetText.mockRejectedValue(new Error("parse failure"));
+
+    const { loadDocument } = await import("../src/loader.js");
+    await expect(loadDocument("/fake/file.pdf")).rejects.toThrow("parse failure");
+    expect(mockDestroy).toHaveBeenCalled();
   });
 });

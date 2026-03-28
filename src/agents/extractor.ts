@@ -1,8 +1,11 @@
-import { ChatAnthropic } from "@langchain/anthropic";
 import { RunnableLambda } from "@langchain/core/runnables";
+import { z } from "zod";
 import type { AgentConfig } from "../schemas/config.js";
 import type { PageChunk } from "../loader.js";
+import { ExtractedEntitySchema } from "../schemas/output.js";
 import type { ExtractedEntity } from "../schemas/output.js";
+import { createChatModel } from "../models.js";
+import { extractJson, extractContentString } from "../utils/json.js";
 import { logger } from "../utils/logger.js";
 
 export interface ExtractorInput {
@@ -13,6 +16,10 @@ export interface ExtractorOutput {
   readonly pages: readonly PageChunk[];
   readonly entities: readonly ExtractedEntity[];
 }
+
+const ExtractorResponseSchema = z.object({
+  entities: z.array(ExtractedEntitySchema),
+});
 
 const SYSTEM_PROMPT = `You are a document entity extractor. Analyze the provided text and extract all key entities.
 
@@ -32,11 +39,7 @@ Return ONLY valid JSON in this exact format:
 Do not include any text outside the JSON object.`;
 
 export function createExtractorChain(config: AgentConfig) {
-  const model = new ChatAnthropic({
-    model: config.model,
-    maxTokens: config.maxTokens,
-    temperature: config.temperature,
-  });
+  const model = createChatModel(config);
 
   return new RunnableLambda({
     func: async (input: ExtractorInput): Promise<ExtractorOutput> => {
@@ -51,14 +54,9 @@ export function createExtractorChain(config: AgentConfig) {
         { role: "human" as const, content: pageTexts },
       ]);
 
-      const content = typeof response.content === "string"
-        ? response.content
-        : response.content
-            .filter((block): block is { type: "text"; text: string } => block.type === "text")
-            .map((block) => block.text)
-            .join("");
-
-      const parsed = JSON.parse(content) as { entities: ExtractedEntity[] };
+      const content = extractContentString(response.content);
+      const raw = extractJson(content);
+      const parsed = ExtractorResponseSchema.parse(raw);
 
       logger.info(`Extractor: found ${parsed.entities.length} entities`);
 

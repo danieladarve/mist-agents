@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { resolve } from "node:path";
 import { writeFileSync } from "node:fs";
 import { loadConfig } from "../src/pipeline.js";
@@ -28,6 +28,16 @@ vi.mock("../src/agents/structurer.js", () => ({
 }));
 
 describe("loadConfig", () => {
+  const originalEnv = process.env["MIST_DEFAULT_MODEL"];
+
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env["MIST_DEFAULT_MODEL"];
+    } else {
+      process.env["MIST_DEFAULT_MODEL"] = originalEnv;
+    }
+  });
+
   it("loads the default config", () => {
     const config = loadConfig(
       resolve(import.meta.dirname, "../src/config/agents.yaml"),
@@ -53,6 +63,16 @@ describe("loadConfig", () => {
   it("throws on invalid config file", () => {
     expect(() => loadConfig("/nonexistent/path.yaml")).toThrow();
   });
+
+  it("overrides model with MIST_DEFAULT_MODEL", () => {
+    process.env["MIST_DEFAULT_MODEL"] = "claude-haiku-4-5-20251001";
+    const config = loadConfig(
+      resolve(import.meta.dirname, "../src/config/agents.yaml"),
+    );
+    for (const agent of config.agents) {
+      expect(agent.model).toBe("claude-haiku-4-5-20251001");
+    }
+  });
 });
 
 describe("runPipeline", () => {
@@ -60,7 +80,7 @@ describe("runPipeline", () => {
     vi.clearAllMocks();
   });
 
-  it("chains agents in order", async () => {
+  it("chains agents in order with typed data flow", async () => {
     const { loadDocument } = await import("../src/loader.js");
     const { createExtractorChain } = await import("../src/agents/extractor.js");
     const { createSummariserChain } = await import("../src/agents/summariser.js");
@@ -121,6 +141,12 @@ describe("runPipeline", () => {
     expect(result.metadata.pipelineVersion).toBe("1.0");
     expect(result.entities).toHaveLength(1);
     expect(result.fullSummary).toBe("Full summary.");
+
+    // Verify agents were called with correct inputs
+    const extractorInvoke = vi.mocked(createExtractorChain).mock.results[0]!.value.invoke;
+    expect(extractorInvoke).toHaveBeenCalledWith({
+      pages: [{ pageNumber: 1, text: "Test content" }],
+    });
   });
 
   it("writes output to file when outputPath is specified", async () => {
@@ -169,7 +195,7 @@ describe("runPipeline", () => {
     );
   });
 
-  it("throws on unknown agent name", async () => {
+  it("throws when required agent is missing from config", async () => {
     const { loadDocument } = await import("../src/loader.js");
 
     vi.mocked(loadDocument).mockResolvedValue([
@@ -178,15 +204,15 @@ describe("runPipeline", () => {
 
     const { runPipeline } = await import("../src/pipeline.js");
 
-    const customConfig = resolve(import.meta.dirname, "fixtures/bad-agent.yaml");
-    const { writeFileSync: realWrite } = await vi.importActual<typeof import("node:fs")>("node:fs");
-    const { mkdirSync } = await vi.importActual<typeof import("node:fs")>("node:fs");
+    // Create a config that only has the extractor enabled
+    const customConfig = resolve(import.meta.dirname, "fixtures/missing-agent.yaml");
+    const { writeFileSync: realWrite, mkdirSync } = await vi.importActual<typeof import("node:fs")>("node:fs");
     mkdirSync(resolve(import.meta.dirname, "fixtures"), { recursive: true });
-    realWrite(customConfig, `version: "1.0"\nagents:\n  - name: nonexistent\n    enabled: true\noutput:\n  format: json\n  pretty: true\n`);
+    realWrite(customConfig, `version: "1.0"\nagents:\n  - name: extractor\n    enabled: true\noutput:\n  format: json\n  pretty: true\n`);
 
     await expect(
       runPipeline("test.pdf", { configPath: customConfig }),
-    ).rejects.toThrow("Unknown agent: nonexistent");
+    ).rejects.toThrow('Required agent "summariser" is not enabled');
 
     const { unlinkSync } = await vi.importActual<typeof import("node:fs")>("node:fs");
     unlinkSync(customConfig);

@@ -1,8 +1,9 @@
-import { ChatAnthropic } from "@langchain/anthropic";
 import { RunnableLambda } from "@langchain/core/runnables";
 import type { AgentConfig } from "../schemas/config.js";
 import type { ExtractedEntity, SectionSummary, DocumentOutput } from "../schemas/output.js";
 import { DocumentOutputSchema } from "../schemas/output.js";
+import { createChatModel } from "../models.js";
+import { extractJson, extractContentString } from "../utils/json.js";
 import { logger } from "../utils/logger.js";
 
 export interface StructurerInput {
@@ -37,11 +38,7 @@ Ensure processedAt is a valid ISO 8601 datetime.
 Return ONLY valid JSON. Do not include any text outside the JSON object.`;
 
 export function createStructurerChain(config: AgentConfig) {
-  const model = new ChatAnthropic({
-    model: config.model,
-    maxTokens: config.maxTokens,
-    temperature: config.temperature,
-  });
+  const model = createChatModel(config);
 
   return new RunnableLambda({
     func: async (input: StructurerInput): Promise<DocumentOutput> => {
@@ -61,16 +58,9 @@ export function createStructurerChain(config: AgentConfig) {
         { role: "human" as const, content: `Structure this data into the final document format:\n${payload}` },
       ]);
 
-      const content = typeof response.content === "string"
-        ? response.content
-        : response.content
-            .filter((block): block is { type: "text"; text: string } => block.type === "text")
-            .map((block) => block.text)
-            .join("");
-
-      const parsed = JSON.parse(content) as unknown;
-
-      const result = DocumentOutputSchema.safeParse(parsed);
+      const content = extractContentString(response.content);
+      const raw = extractJson(content);
+      const result = DocumentOutputSchema.safeParse(raw);
 
       if (result.success) {
         logger.info("Structurer: output validated successfully");
@@ -89,15 +79,9 @@ export function createStructurerChain(config: AgentConfig) {
         },
       ]);
 
-      const retryContent = typeof retryResponse.content === "string"
-        ? retryResponse.content
-        : retryResponse.content
-            .filter((block): block is { type: "text"; text: string } => block.type === "text")
-            .map((block) => block.text)
-            .join("");
-
-      const retryParsed = JSON.parse(retryContent) as unknown;
-      const retryResult = DocumentOutputSchema.parse(retryParsed);
+      const retryContent = extractContentString(retryResponse.content);
+      const retryRaw = extractJson(retryContent);
+      const retryResult = DocumentOutputSchema.parse(retryRaw);
 
       logger.info("Structurer: retry output validated successfully");
       return retryResult;

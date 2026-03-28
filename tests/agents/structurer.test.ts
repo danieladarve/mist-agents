@@ -4,16 +4,14 @@ import type { AgentConfig } from "../../src/schemas/config.js";
 
 const mockInvoke = vi.fn();
 
-vi.mock("@langchain/anthropic", () => ({
-  ChatAnthropic: class MockChatAnthropic {
-    invoke = mockInvoke;
-    constructor() {}
-  },
+vi.mock("../../src/models.js", () => ({
+  createChatModel: () => ({ invoke: mockInvoke }),
 }));
 
 const mockConfig: AgentConfig = {
   name: "structurer",
   enabled: true,
+  provider: "anthropic",
   model: "claude-sonnet-4-20250514",
   maxTokens: 8192,
   temperature: 0,
