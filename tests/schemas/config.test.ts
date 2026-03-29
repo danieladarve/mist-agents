@@ -6,6 +6,7 @@ describe("AgentConfigSchema", () => {
     const config = {
       name: "extractor",
       enabled: true,
+      provider: "anthropic",
       model: "claude-sonnet-4-20250514",
       maxTokens: 4096,
       temperature: 0,
@@ -16,9 +17,36 @@ describe("AgentConfigSchema", () => {
   it("applies defaults for optional fields", () => {
     const result = AgentConfigSchema.parse({ name: "test" });
     expect(result.enabled).toBe(true);
+    expect(result.provider).toBe("anthropic");
     expect(result.model).toBe("claude-sonnet-4-20250514");
     expect(result.maxTokens).toBe(4096);
     expect(result.temperature).toBe(0);
+  });
+
+  it("accepts ollama provider", () => {
+    const result = AgentConfigSchema.parse({
+      name: "extractor",
+      provider: "ollama",
+      model: "qwen3:8b",
+    });
+    expect(result.provider).toBe("ollama");
+    expect(result.model).toBe("qwen3:8b");
+  });
+
+  it("accepts optional baseUrl for ollama", () => {
+    const result = AgentConfigSchema.parse({
+      name: "extractor",
+      provider: "ollama",
+      model: "qwen3:8b",
+      baseUrl: "http://192.168.1.100:11434",
+    });
+    expect(result.baseUrl).toBe("http://192.168.1.100:11434");
+  });
+
+  it("rejects invalid provider", () => {
+    expect(() =>
+      AgentConfigSchema.parse({ name: "test", provider: "openai" }),
+    ).toThrow();
   });
 
   it("rejects missing name", () => {
